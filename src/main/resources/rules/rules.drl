@@ -1,0 +1,72 @@
+package rules
+
+import com.drools.coupons.dto.Order
+import com.drools.coupons.entity.Coupon
+import com.drools.coupons.entity.Products
+import java.time.LocalDate
+import java.util.List
+
+global LocalDate curDate
+global List<String> avaCoupons
+global String couponIndicator
+
+rule "Flat 50 Rs off for new Customers"
+    dialect "java"
+    when
+        $order: Order(customer.spend == 0,getCouponCount() == 1,totalAmount>500,$allCoupon:getCoupons())
+        $coupon: Coupon(curDate.isBefore(getEndDate()),couponName=="NEW50OFF") from $allCoupon
+
+    then
+        System.out.println("Coupon "+$coupon.getCouponName()+" is applicable");
+        System.out.println("Discount of Rs"+$coupon.getAmount()+" is applied");
+        $order.setDiscountPrice($coupon.getAmount());
+        $order.setDiscount($coupon.getAmount());
+        $order.getShippingDetails().getCustomer().setSpend($order.getTotalAmount());
+        avaCoupons.add($coupon.getCouponName());
+        $order.getShippingDetails().getCustomer().setAvailedCoupons(avaCoupons);
+end
+
+
+rule "20% off on orders above 500 Rs"
+    dialect "java"
+    when
+        $order: Order(customer.spend == 0,getCouponCount() == 1,totalAmount>500,$allCoupon:getCoupons(),$availCoupon:customer.availedCoupons not contains "20POFF")
+        $coupon: Coupon(curDate.isBefore(getEndDate()),couponName=="20POFF") from $allCoupon
+
+
+    then
+        System.out.println("Coupon "+$coupon.getCouponName()+" is applicable");
+        System.out.println("Discount of "+$coupon.getValue()+"% is applied");
+        $order.setDiscountPrice($coupon.getValue()*$order.getTotalAmount()/100<500? $coupon.getValue()*$order.getTotalAmount()/100: 500);
+        $order.setDiscount($coupon.getValue()*$order.getTotalAmount()/100<500? $coupon.getValue()*$order.getTotalAmount()/100: 500);
+        $order.getShippingDetails().getCustomer().setSpend($order.getTotalAmount());
+        avaCoupons.add($coupon.getCouponName());
+        $order.getShippingDetails().getCustomer().setAvailedCoupons(avaCoupons);
+end
+
+
+rule "Buy 2 books, get 50% off on the third book"
+    dialect "java"
+    when
+        $order: Order(bookCount()>=3,$allCoupon:getCoupons(),$bookPrice:sortPrice())
+        $coupon: Coupon(curDate.isBefore(getEndDate()),couponName=="BUY2GET50POFF") from $allCoupon
+
+    then
+        System.out.println("Coupon "+$coupon.getCouponName()+" is applicable");
+        System.out.println("Discount of "+$coupon.getValue()+"% is applied");
+        $order.setDiscount($coupon.getValue()*$bookPrice/100);
+        $order.setDiscountPrice($coupon.getValue()*$bookPrice/100);
+        $order.getShippingDetails().getCustomer().setSpend($order.getTotalAmount());
+        avaCoupons.add($coupon.getCouponName());
+        $order.getShippingDetails().getCustomer().setAvailedCoupons(avaCoupons);
+end
+
+
+rule "Adding new Coupons"
+    dialect "java"
+    when
+        $coupon: Coupon(getValue()<=100 && getValue()>=0,getAmount()>=0)
+    then
+        System.out.println("New Coupon added");
+        couponIndicator="Y";
+end
